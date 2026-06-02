@@ -1,52 +1,37 @@
-/**
- * Bottom tab bar — JS `<Tabs>` from expo-router (react-navigation under the
- * hood). We tried NativeTabs first but its `canPreventDefault: false`
- * constraint makes "tap More → open something" impossible. JS Tabs
- * supports `listeners.tabPress + e.preventDefault()`, the canonical RN
- * pattern for tab-as-action.
- *
- * The "More" tab is **not a navigation target** — its press opens a
- * DropdownMenu popover anchored above the tab. The popover is rendered
- * by `<MoreTabDropdownAnchor />` as a sibling of `<Tabs>`, NOT as a
- * `tabBarButton` replacement: keeping the real tab button intact means
- * the icon + "More" label render identically to the other three tabs.
- * We just open the dropdown imperatively from `listeners.tabPress` via
- * the exposed `TriggerRef.open()`.
- *
- * The stub (tabs)/more.tsx file still exists only because expo-router
- * requires every Tabs.Screen to have a backing route file — the press
- * is preventDefault'd so we never actually navigate to it.
- *
- * Active / inactive tint colors are derived from the current colour
- * scheme via THEME so dark mode picks contrasting values automatically.
- */
-import { useRef } from "react";
-import { Tabs } from "expo-router";
-import { Image } from "expo-image";
-import { View } from "react-native";
-import type { TriggerRef } from "@rn-primitives/dropdown-menu";
+import { useState } from "react";
+import { usePathname } from "expo-router";
+import { Pressable, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Host, TabView } from "@expo/ui/swift-ui";
+import {
+  badge,
+  tabViewStyle,
+} from "@expo/ui/swift-ui/modifiers";
 import { useWorkspaceStore } from "@/data/workspace-store";
-import { useColorScheme } from "@/lib/use-color-scheme";
-import { THEME } from "@/lib/theme";
 import {
   useInboxUnreadCount,
   useChatUnreadSessionCount,
 } from "@/lib/unread-counts";
-import { MoreTabDropdownAnchor } from "@/components/nav/more-tab-dropdown";
+import Inbox from "./inbox";
+import MyIssues from "./my-issues";
+import Chat from "./chat";
+import More from "./more";
 
-// Only override backgroundColor — @react-navigation/elements Badge internally
-// sets borderRadius = size/2, height = size, minWidth = size, so a single
-// character renders as a perfect circle. Overriding minWidth/fontSize here
-// breaks that geometry. Text color is auto-derived from backgroundColor
-// luminance by Badge itself (white on brand blue).
-const BADGE_STYLE = {
-  backgroundColor: THEME.light.brand,
-};
+type MainTab = "inbox" | "my-issues" | "chat" | "more";
+
+function selectedTabFromPath(pathname: string): MainTab {
+  if (pathname.includes("/more")) return "more";
+  if (pathname.includes("/my-issues")) return "my-issues";
+  if (pathname.includes("/chat")) return "chat";
+  return "inbox";
+}
 
 export default function TabsLayout() {
-  const { colorScheme } = useColorScheme();
-  const t = THEME[colorScheme];
-
+  const pathname = usePathname();
+  const insets = useSafeAreaInsets();
+  const [selectedTab, setSelectedTab] = useState<MainTab>(() =>
+    selectedTabFromPath(pathname),
+  );
   const wsId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const inboxUnread = useInboxUnreadCount(wsId);
   const chatUnread = useChatUnreadSessionCount(wsId);
@@ -59,91 +44,92 @@ export default function TabsLayout() {
   const chatBadge =
     chatUnread > 0 ? (chatUnread > 9 ? "9+" : String(chatUnread)) : undefined;
 
-  // Imperative handle into the More tab's dropdown — listeners.tabPress
-  // calls .open(); the @rn-primitives Trigger measures itself inside
-  // open() so the popover anchors to MoreTabDropdownAnchor's rect.
-  const moreTriggerRef = useRef<TriggerRef>(null);
+  const onSelectionChange = (value: string) => {
+    if (
+      value === "inbox" ||
+      value === "my-issues" ||
+      value === "chat" ||
+      value === "more"
+    ) {
+      setSelectedTab(value);
+    }
+  };
 
   return (
     <View style={{ flex: 1 }}>
-      <Tabs
-        screenOptions={{
-          headerShown: false,
-          tabBarActiveTintColor: t.foreground,
-          tabBarInactiveTintColor: t.mutedForeground,
-          tabBarStyle: { backgroundColor: t.background },
-          tabBarLabelStyle: { fontSize: 11 },
+      <View style={{ flex: 1, paddingBottom: insets.bottom + 84 }}>
+        {selectedTab === "inbox" ? <Inbox /> : null}
+        {selectedTab === "my-issues" ? <MyIssues /> : null}
+        {selectedTab === "chat" ? <Chat isActive /> : null}
+        {selectedTab === "more" ? <More /> : null}
+      </View>
+
+      <Host
+        ignoreSafeArea="all"
+        style={{
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: insets.bottom + 96,
         }}
       >
-        <Tabs.Screen
-          name="inbox"
-          options={{
-            title: "Inbox",
-            tabBarBadge: inboxBadge,
-            tabBarBadgeStyle: BADGE_STYLE,
-            tabBarIcon: ({ color, size, focused }) => (
-              <Image
-                source={focused ? "sf:tray.fill" : "sf:tray"}
-                tintColor={color}
-                style={{ width: size, height: size }}
-              />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="my-issues"
-          options={{
-            title: "My Issues",
-            tabBarIcon: ({ color, size, focused }) => (
-              <Image
-                source={focused ? "sf:checklist" : "sf:checklist.unchecked"}
-                tintColor={color}
-                style={{ width: size, height: size }}
-              />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="chat"
-          options={{
-            title: "Chat",
-            tabBarBadge: chatBadge,
-            tabBarBadgeStyle: BADGE_STYLE,
-            tabBarIcon: ({ color, size, focused }) => (
-              <Image
-                source={focused ? "sf:bubble.left.fill" : "sf:bubble.left"}
-                tintColor={color}
-                style={{ width: size, height: size }}
-              />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="more"
-          options={{
-            title: "More",
-            tabBarIcon: ({ color, size }) => (
-              <Image
-                source="sf:ellipsis"
-                tintColor={color}
-                style={{ width: size, height: size }}
-              />
-            ),
-          }}
-          listeners={() => ({
-            tabPress: (e) => {
-              // Don't navigate to the (stub) /more screen — open the
-              // dropdown popover instead. The trigger is invisible and
-              // mounted in MoreTabDropdownAnchor below; ref.open() also
-              // measures its rect so the popover anchors correctly.
-              e.preventDefault();
-              moreTriggerRef.current?.open();
-            },
-          })}
-        />
-      </Tabs>
-
-      <MoreTabDropdownAnchor triggerRef={moreTriggerRef} />
+        <TabView
+          selection={selectedTab}
+          onSelectionChange={onSelectionChange}
+          modifiers={[tabViewStyle({ type: "automatic" })]}
+        >
+          <TabView.Tab
+            value="inbox"
+            label="Inbox"
+            systemImage="tray"
+            modifiers={inboxBadge ? [badge(inboxBadge)] : undefined}
+          >
+            <View />
+          </TabView.Tab>
+          <TabView.Tab
+            value="my-issues"
+            label="My Issues"
+            systemImage="checklist"
+          >
+            <View />
+          </TabView.Tab>
+          <TabView.Tab
+            value="chat"
+            label="Chat"
+            systemImage="bubble.left"
+            modifiers={chatBadge ? [badge(chatBadge)] : undefined}
+          >
+            <View />
+          </TabView.Tab>
+          <TabView.Tab value="more" label="More" systemImage="ellipsis">
+            <View />
+          </TabView.Tab>
+        </TabView>
+      </Host>
+      <View
+        pointerEvents="box-none"
+        style={{
+          position: "absolute",
+          left: 48,
+          right: 48,
+          bottom: insets.bottom + 6,
+          height: 72,
+          flexDirection: "row",
+        }}
+      >
+        {(["inbox", "my-issues", "chat", "more"] satisfies MainTab[]).map(
+          (tab) => (
+            <Pressable
+              key={tab}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: selectedTab === tab }}
+              onPress={() => setSelectedTab(tab)}
+              style={{ flex: 1 }}
+            />
+          ),
+        )}
+      </View>
     </View>
   );
 }

@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils';
+import { resolvePublicFileUrl } from '@/lib/public-file-url';
 import * as AvatarPrimitive from '@rn-primitives/avatar';
 
 function Avatar({
@@ -15,9 +16,15 @@ function Avatar({
 
 function AvatarImage({
   className,
+  source,
   ...props
 }: React.ComponentProps<typeof AvatarPrimitive.Image>) {
-  return <AvatarPrimitive.Image className={cn('aspect-square size-full', className)} {...props} />;
+  const resolvedSource =
+    source && typeof source === 'object' && !Array.isArray(source) && 'uri' in source && typeof source.uri === 'string'
+      ? { ...source, uri: resolvePublicFileUrl(source.uri) ?? source.uri }
+      : source;
+
+  return <AvatarPrimitive.Image className={cn('aspect-square size-full', className)} source={resolvedSource} {...props} />;
 }
 
 function AvatarFallback({

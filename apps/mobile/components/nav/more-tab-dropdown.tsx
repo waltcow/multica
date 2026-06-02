@@ -35,7 +35,7 @@
  *     and offered no friction against accidental taps.
  */
 import { useMemo } from "react";
-import { Image, Pressable, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { Image as ExpoImage } from "expo-image";
 import { router, usePathname } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
@@ -49,6 +49,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Text } from "@/components/ui/text";
 import { workspaceListOptions } from "@/data/queries/workspaces";
 import { useAuthStore } from "@/data/auth-store";
@@ -193,18 +194,16 @@ function UserCard({
       className="h-12 gap-3"
       accessibilityLabel="Account settings"
     >
-      {user?.avatar_url ? (
-        <Image
-          source={{ uri: user.avatar_url }}
-          className="size-8 rounded-full bg-muted"
-        />
-      ) : (
-        <View className="size-8 rounded-full bg-muted items-center justify-center">
+      <Avatar alt={user?.name ?? "User avatar"} className="size-8">
+        {user?.avatar_url ? (
+          <AvatarImage source={{ uri: user.avatar_url }} />
+        ) : null}
+        <AvatarFallback>
           <Text className="text-xs font-medium text-muted-foreground">
             {initial}
           </Text>
-        </View>
-      )}
+        </AvatarFallback>
+      </Avatar>
       <View className="flex-1 min-w-0">
         <Text
           className="text-sm font-medium text-foreground"

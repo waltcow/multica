@@ -38,7 +38,6 @@ import {
   View,
 } from "react-native";
 import { router } from "expo-router";
-import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   Agent,
@@ -81,7 +80,7 @@ import { NoAgentBanner } from "@/components/chat/no-agent-banner";
 import { OfflineBanner } from "@/components/chat/offline-banner";
 import { useChatSelectStore } from "@/data/chat-select-store";
 
-export default function ChatTab() {
+export default function ChatTab({ isActive }: { isActive: boolean }) {
   const qc = useQueryClient();
   const wsId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const wsSlug = useWorkspaceStore((s) => s.currentWorkspaceSlug);
@@ -190,23 +189,21 @@ export default function ChatTab() {
     setActiveSessionId(null);
   });
 
-  // Exit text-selection mode whenever the chat tab loses focus. Expo
-  // Router bottom tabs stay mounted across tab switches, so a plain
-  // useEffect cleanup wouldn't fire — useFocusEffect is the navigation-
-  // aware equivalent.
-  useFocusEffect(
-    useCallback(() => () => useChatSelectStore.getState().clear(), []),
-  );
+  // Exit text-selection mode whenever the chat tab loses focus. @expo/ui's
+  // SwiftUI TabView renders tab children outside React Navigation screen
+  // focus context, so the parent passes the selected tab state explicitly.
+  useEffect(() => {
+    if (!isActive) useChatSelectStore.getState().clear();
+  }, [isActive]);
 
   // ── Auto markRead while viewing a session with unread state ──────────
-  const isFocused = useIsFocused();
   const markRead = useMarkChatSessionRead();
   useEffect(() => {
-    if (!isFocused) return;
+    if (!isActive) return;
     if (!activeSessionId) return;
     if (!activeSession?.has_unread) return;
     markRead.mutate(activeSessionId);
-  }, [isFocused, activeSessionId, activeSession?.has_unread, markRead]);
+  }, [isActive, activeSessionId, activeSession?.has_unread, markRead]);
 
   // ── Mutations ──────────────────────────────────────────────────────────
   const createSession = useCreateChatSession();

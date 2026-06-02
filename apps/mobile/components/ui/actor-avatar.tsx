@@ -16,6 +16,7 @@
  * 30s wall-clock tick — and we don't want every comment-author thumbnail
  * subscribing to that.
  */
+import { useEffect, useState } from "react";
 import { Image, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useColorScheme } from "nativewind";
@@ -26,6 +27,7 @@ import { useWorkspaceStore } from "@/data/workspace-store";
 import { useAgentPresence } from "@/lib/use-agent-presence";
 import { PresenceDot } from "@/components/ui/presence-dot";
 import { THEME } from "@/lib/theme";
+import { resolvePublicFileUrl } from "@/lib/public-file-url";
 
 // `system` actors are server-side automation (state changes triggered by the
 // platform itself, not a member or an agent). InboxItem.actor_type carries
@@ -85,19 +87,23 @@ function BareAvatar({
   // Squad.avatar_url exists (packages/core/types/squad.ts) and useActorLookup
   // already returns it — the previous early-return for type==="squad" meant
   // that value was silently dropped.
-  // Only treat a URL as renderable if it actually looks like one — RN <Image>
-  // can crash native-side on malformed sources (empty string, plain "foo",
-  // etc.). Cheap regex; falsy / bad input falls through to the icon fallback.
   const rawUrl = type && type !== "system" ? getAvatarUrl(type, id) : null;
-  const url =
-    rawUrl && /^(https?:|data:|file:|asset:)/.test(rawUrl) ? rawUrl : null;
+  const url = resolvePublicFileUrl(rawUrl);
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
 
-  if (url) {
+  useEffect(() => {
+    if (failedUrl && failedUrl !== url) {
+      setFailedUrl(null);
+    }
+  }, [failedUrl, url]);
+
+  if (url && failedUrl !== url) {
     return (
       <Image
         source={{ uri: url }}
         style={{ width: size, height: size, borderRadius: radius }}
         className="bg-muted"
+        onError={() => setFailedUrl(url)}
       />
     );
   }

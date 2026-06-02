@@ -79,11 +79,11 @@ This pattern repeats: timeline coalescing (`buildTimelineGroups`), inbox dedup, 
 
 Start minimal. Add to this list when actually adopted — do NOT pre-list libraries.
 
-- **Expo SDK 55**
-- **React Native 0.82**
-- **React 19.1** — whatever Expo SDK 55 ships. Pinned in `apps/mobile/package.json` directly, NOT via root `catalog:`.
+- **Expo SDK 56**
+- **React Native 0.85**
+- **React 19.2** — whatever Expo SDK 56 ships. Pinned in `apps/mobile/package.json` directly, NOT via root `catalog:`.
 - **TypeScript** strict
-- **Expo Router 55** (file-based routing — version aligns with Expo SDK)
+- **Expo Router 56** (file-based routing — version aligns with Expo SDK)
 - **NativeWind 4** + **Tailwind 3.4** — NativeWind 5 is unstable; stay on v4. (Note: web/desktop use Tailwind v4 — versions intentionally differ.)
 - **react-native-reusables (RNR)** — the shadcn equivalent for React Native. Uses NativeWind + RN-Primitives + CVA. Component API mirrors shadcn. **Phased adoption in progress — see `apps/mobile/docs/rnr-migration.md` for the canonical plan, three-tier classification, and Phase 0/1/2/3 status.**
 - **TanStack Query 5** — mobile owns its `QueryClient` with `AppState` focus listener + `NetInfo` online listener.

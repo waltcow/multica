@@ -26,9 +26,9 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     orientation: "portrait",
     userInterfaceStyle: "automatic",
     scheme: "multica",
-    // 1024x1024 source shared with the desktop client
-    // (apps/desktop/build/icon.png). Expo prebuild generates every required
-    // iOS icon size from this single PNG.
+    // 1024x1024 full-bleed opaque iOS source generated from the desktop icon
+    // artwork, recentered for Apple's app icon mask. Expo prebuild generates
+    // every required iOS icon size from this single PNG.
     icon: "./assets/icon.png",
     ios: {
       supportsTablet: false,
@@ -50,6 +50,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     plugins: [
       "expo-router",
       "expo-secure-store",
+      "expo-image",
       "@react-native-community/datetimepicker",
       "react-native-enriched-markdown",
       [
@@ -69,6 +70,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         "expo-build-properties",
         {
           ios: {
+            deploymentTarget: "16.4",
             buildReactNativeFromSource: true,
           },
         },
