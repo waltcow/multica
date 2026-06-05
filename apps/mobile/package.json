@@ -16,7 +16,8 @@
     "ios:device:prod": "dotenv -e .env.production -- cross-env APP_ENV=production expo run:ios --device",
     "ios:device:prod:release": "dotenv -e .env.production -- cross-env APP_ENV=production expo run:ios --device --configuration Release",
     "lint": "expo lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@expo/ui": "56.0.15",
@@ -88,6 +89,7 @@
     "cross-env": "^7.0.3",
     "dotenv-cli": "^7.4.4",
     "eslint-config-expo": "~56.0.4",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "vitest": "catalog:"
   }
 }

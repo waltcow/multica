@@ -1,8 +1,8 @@
 name: Mobile Verify
 
-# Runs lint + typecheck for apps/mobile only, parallel to the main CI
-# workflow. Path-filtered so PRs that don't touch mobile (or anything
-# mobile transitively depends on) pay zero cost.
+# Runs lint + typecheck + tests for apps/mobile only, parallel to the main CI
+# workflow. This fork keeps it manually triggered to avoid paying mobile CI
+# cost on every upstream sync.
 on:
   workflow_dispatch:
 
@@ -29,5 +29,5 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Type check and lint
-        run: pnpm exec turbo typecheck lint --filter=@multica/mobile
+      - name: Type check, lint, and test
+        run: pnpm exec turbo typecheck lint test --filter=@multica/mobile
