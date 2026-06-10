@@ -1,6 +1,8 @@
 name: Selfhost Release
 
 on:
+  schedule:
+    - cron: "0 1 * * *" # UTC 01:00 = CST 09:00
   workflow_dispatch:
     inputs:
       ref:
