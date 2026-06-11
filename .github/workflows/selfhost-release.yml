@@ -38,7 +38,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ inputs.ref || 'main' }}
           fetch-depth: 1
 
       - name: Compute tag name and push git tag
@@ -61,13 +61,13 @@ jobs:
 
   release-cli:
     needs: prepare
-    if: inputs.run-cli && github.repository_owner == 'multica-ai'
+    if: github.event_name == 'schedule' || inputs.run-cli
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ inputs.ref || 'main' }}
           fetch-depth: 0
 
       - name: Fetch tags
@@ -90,13 +90,13 @@ jobs:
 
   docker-backend-build:
     needs: prepare
-    if: inputs.run-backend
+    if: github.event_name == 'schedule' || inputs.run-backend
     strategy:
       fail-fast: false
       matrix:
         include:
           - platform: linux/amd64
-            runs-on: ubuntu-latest          
+            runs-on: ubuntu-latest
     runs-on: ${{ matrix.runs-on }}
     steps:
       - name: Prepare
@@ -107,13 +107,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ inputs.ref || 'main' }}
 
-      - name: Compute backend image labels
+      - name: Compute backend image metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository_owner }}/multica-backend
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=latest
+            type=raw,value=${{ needs.prepare.outputs.tag_name }}
           labels: |
             org.opencontainers.image.title=Multica Backend
             org.opencontainers.image.description=Multica self-hosted backend
@@ -128,93 +133,31 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push by digest
-        id: build
+      - name: Build and push image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile
           pull: true
           platforms: ${{ matrix.platform }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=dispatch-backend-${{ env.PLATFORM_PAIR }}
           cache-to: type=gha,mode=max,scope=dispatch-backend-${{ env.PLATFORM_PAIR }}
           build-args: |
             VERSION=${{ needs.prepare.outputs.tag_name }}
             COMMIT=${{ github.sha }}
-          outputs: type=image,name=ghcr.io/${{ github.repository_owner }}/multica-backend,push-by-digest=true,name-canonical=true,push=true
-
-      - name: Export digest
-        run: |
-          mkdir -p /tmp/digests
-          digest="${{ steps.build.outputs.digest }}"
-          touch "/tmp/digests/${digest#sha256:}"
-
-      - name: Upload digest
-        uses: actions/upload-artifact@v4
-        with:
-          name: digests-backend-${{ env.PLATFORM_PAIR }}
-          path: /tmp/digests/*
-          if-no-files-found: error
-          retention-days: 1
-
-  docker-backend-merge:
-    needs: [prepare, docker-backend-build]
-    if: inputs.run-backend
-    runs-on: ubuntu-latest
-    concurrency:
-      group: dispatch-docker-backend-${{ github.run_id }}
-      cancel-in-progress: true
-    steps:
-      - name: Download digests
-        uses: actions/download-artifact@v4
-        with:
-          path: /tmp/digests
-          pattern: digests-backend-*
-          merge-multiple: true
-
-      - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Compute backend image tags
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/multica-backend
-          flavor: |
-            latest=false
-          tags: |
-            type=raw,value=latest
-            type=raw,value=${{ needs.prepare.outputs.tag_name }}
-
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create manifest list and push
-        working-directory: /tmp/digests
-        run: |
-          docker buildx imagetools create \
-            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf 'ghcr.io/${{ github.repository_owner }}/multica-backend@sha256:%s ' *)
-
-      - name: Inspect image
-        run: |
-          docker buildx imagetools inspect \
-            ghcr.io/${{ github.repository_owner }}/multica-backend:${{ steps.meta.outputs.version }}
 
   docker-web-build:
     needs: prepare
-    if: inputs.run-web
+    if: github.event_name == 'schedule' || inputs.run-web
     strategy:
       fail-fast: false
       matrix:
         include:
           - platform: linux/amd64
-            runs-on: ubuntu-latest          
+            runs-on: ubuntu-latest
     runs-on: ${{ matrix.runs-on }}
     steps:
       - name: Prepare
@@ -225,13 +168,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ inputs.ref || 'main' }}
 
-      - name: Compute web image labels
+      - name: Compute web image metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository_owner }}/multica-web
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=latest
+            type=raw,value=${{ needs.prepare.outputs.tag_name }}
           labels: |
             org.opencontainers.image.title=Multica Web
             org.opencontainers.image.description=Multica self-hosted web frontend
@@ -246,80 +194,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push by digest
-        id: build
+      - name: Build and push image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile.web
           pull: true
           platforms: ${{ matrix.platform }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=dispatch-web-${{ env.PLATFORM_PAIR }}
           cache-to: type=gha,mode=max,scope=dispatch-web-${{ env.PLATFORM_PAIR }}
           build-args: |
             REMOTE_API_URL=http://backend:8080
             NEXT_PUBLIC_APP_VERSION=${{ needs.prepare.outputs.tag_name }}
-          outputs: type=image,name=ghcr.io/${{ github.repository_owner }}/multica-web,push-by-digest=true,name-canonical=true,push=true
-
-      - name: Export digest
-        run: |
-          mkdir -p /tmp/digests
-          digest="${{ steps.build.outputs.digest }}"
-          touch "/tmp/digests/${digest#sha256:}"
-
-      - name: Upload digest
-        uses: actions/upload-artifact@v4
-        with:
-          name: digests-web-${{ env.PLATFORM_PAIR }}
-          path: /tmp/digests/*
-          if-no-files-found: error
-          retention-days: 1
-
-  docker-web-merge:
-    needs: [prepare, docker-web-build]
-    if: inputs.run-web
-    runs-on: ubuntu-latest
-    concurrency:
-      group: dispatch-docker-web-${{ github.run_id }}
-      cancel-in-progress: true
-    steps:
-      - name: Download digests
-        uses: actions/download-artifact@v4
-        with:
-          path: /tmp/digests
-          pattern: digests-web-*
-          merge-multiple: true
-
-      - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Compute web image tags
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/multica-web
-          flavor: |
-            latest=false
-          tags: |
-            type=raw,value=latest
-            type=raw,value=${{ needs.prepare.outputs.tag_name }}
-
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create manifest list and push
-        working-directory: /tmp/digests
-        run: |
-          docker buildx imagetools create \
-            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf 'ghcr.io/${{ github.repository_owner }}/multica-web@sha256:%s ' *)
-
-      - name: Inspect image
-        run: |
-          docker buildx imagetools inspect \
-            ghcr.io/${{ github.repository_owner }}/multica-web:${{ steps.meta.outputs.version }}
