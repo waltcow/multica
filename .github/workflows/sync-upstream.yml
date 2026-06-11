@@ -14,14 +14,14 @@ jobs:
 
     steps:
       - name: Checkout target repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: main
           persist-credentials: false
 
       - name: Sync upstream changes
         id: sync
-        uses: aormsby/Fork-Sync-With-Upstream-action@v3.4.1
+        uses: aormsby/Fork-Sync-With-Upstream-action@v3.4.3
         with:
           target_sync_branch: main
           target_repo_token: ${{ secrets.GITHUB_TOKEN }}
