@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -17,6 +18,10 @@ import (
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
 	"github.com/multica-ai/multica/server/pkg/protocol"
 )
+
+// DiceBear base URL for generating default squad avatars. Uses the identicon
+// style (geometric patterns) which is appropriate for groups/teams.
+const diceBearSquadBaseURL = "https://api.dicebear.com/10.x/identicon/svg"
 
 // ── Response types ──────────────────────────────────────────────────────────
 
@@ -239,8 +244,10 @@ func (h *Handler) CreateSquad(w http.ResponseWriter, r *http.Request) {
 	}
 
 	avatarURL := pgtype.Text{}
-	if req.AvatarURL != nil {
+	if req.AvatarURL != nil && *req.AvatarURL != "" {
 		avatarURL = pgtype.Text{String: *req.AvatarURL, Valid: true}
+	} else {
+		avatarURL = pgtype.Text{String: diceBearSquadBaseURL + "?seed=" + url.QueryEscape(req.Name), Valid: true}
 	}
 
 	squad, err := h.Queries.CreateSquad(r.Context(), db.CreateSquadParams{
