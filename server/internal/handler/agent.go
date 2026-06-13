@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"unicode/utf8"
@@ -30,6 +31,10 @@ import (
 // in unicode code points (utf8.RuneCountInString), matching Postgres
 // char_length and the front-end's String.prototype.length-with-counter UX.
 const maxAgentDescriptionLength = 255
+
+// DiceBear base URL for generating default agent avatars. Uses the bottts
+// style (robotic avatars) seeded with the agent name for deterministic output.
+const diceBearBaseURL = "https://api.dicebear.com/10.x/bottts/svg"
 
 type AgentResponse struct {
 	ID            string          `json:"id"`
@@ -658,6 +663,12 @@ func (h *Handler) CreateAgent(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.MaxConcurrentTasks == 0 {
 		req.MaxConcurrentTasks = 6
+	}
+
+	// Default to a DiceBear bottts avatar when no avatar URL is provided.
+	if req.AvatarURL == nil || *req.AvatarURL == "" {
+		avatarURL := diceBearBaseURL + "?seed=" + url.QueryEscape(req.Name)
+		req.AvatarURL = &avatarURL
 	}
 
 	runtimeUUID, ok := parseUUIDOrBadRequest(w, req.RuntimeID, "runtime_id")
