@@ -146,7 +146,8 @@ describe("WorkspaceTab — issue prefix editing", () => {
     const user = userEvent.setup();
     render(<WorkspaceTab />, { wrapper: I18nWrapper });
 
-    await user.click(screen.getByRole("button", { name: /^Save$/ }));
+    // There are two Save buttons (General and Telegram sections); the first is the General section's.
+    await user.click(screen.getAllByRole("button", { name: /^Save$/ })[0]);
 
     await waitFor(() => {
       expect(mockUpdateWorkspace).toHaveBeenCalledTimes(1);
@@ -173,7 +174,8 @@ describe("WorkspaceTab — issue prefix editing", () => {
     await user.clear(input);
     await user.type(input, "NEW");
 
-    await user.click(screen.getByRole("button", { name: /^Save$/ }));
+    // There are two Save buttons (General and Telegram sections); the first is the General section's.
+    await user.click(screen.getAllByRole("button", { name: /^Save$/ })[0]);
 
     // Save is gated behind the dialog — no API call yet.
     expect(mockUpdateWorkspace).not.toHaveBeenCalled();
@@ -209,7 +211,8 @@ describe("WorkspaceTab — issue prefix editing", () => {
     await user.clear(input);
     await user.type(input, "NEW");
 
-    await user.click(screen.getByRole("button", { name: /^Save$/ }));
+    // There are two Save buttons (General and Telegram sections); the first is the General section's.
+    await user.click(screen.getAllByRole("button", { name: /^Save$/ })[0]);
 
     await screen.findByText(/Change issue prefix/i);
     await user.click(screen.getByRole("button", { name: "Cancel" }));
@@ -226,7 +229,8 @@ describe("WorkspaceTab — issue prefix editing", () => {
     const input = screen.getByPlaceholderText("TES") as HTMLInputElement;
     await user.clear(input);
 
-    expect(screen.getByRole("button", { name: /^Save$/ })).toBeDisabled();
+    // There are two Save buttons (General and Telegram sections); the first is the General section's.
+    expect(screen.getAllByRole("button", { name: /^Save$/ })[0]).toBeDisabled();
   });
 
   it("disables the prefix input for non-admins", () => {

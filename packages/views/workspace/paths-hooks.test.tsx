@@ -25,6 +25,8 @@ function makeWorkspace(over: Partial<Workspace>): Workspace {
     repos: [],
     issue_prefix: "DEF",
     avatar_url: null,
+    telegram_bot_token: null,
+    telegram_chat_id: null,
     created_at: "",
     updated_at: "",
     ...over,

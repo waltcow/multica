@@ -102,6 +102,8 @@ export function WorkspaceTab() {
   const [description, setDescription] = useState(workspace?.description ?? "");
   const [context, setContext] = useState(workspace?.context ?? "");
   const [issuePrefix, setIssuePrefix] = useState(workspace?.issue_prefix ?? "");
+  const [telegramBotToken, setTelegramBotToken] = useState(workspace?.telegram_bot_token ?? "");
+  const [telegramChatId, setTelegramChatId] = useState(workspace?.telegram_chat_id ?? "");
   const [saving, setSaving] = useState(false);
   const [actionId, setActionId] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<{
@@ -132,6 +134,8 @@ export function WorkspaceTab() {
     setDescription(workspace?.description ?? "");
     setContext(workspace?.context ?? "");
     setIssuePrefix(workspace?.issue_prefix ?? "");
+    setTelegramBotToken(workspace?.telegram_bot_token ?? "");
+    setTelegramChatId(workspace?.telegram_chat_id ?? "");
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally keyed on id only; see comment above
   }, [workspace?.id]);
 
@@ -172,6 +176,27 @@ export function WorkspaceTab() {
       toast.error(e instanceof Error ? e.message : t(($) => $.workspace.toast_save_failed));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const [savingTelegram, setSavingTelegram] = useState(false);
+
+  const performSaveTelegram = async () => {
+    if (!workspace) return;
+    setSavingTelegram(true);
+    try {
+      const updated = await api.updateWorkspace(workspace.id, {
+        telegram_bot_token: telegramBotToken || null,
+        telegram_chat_id: telegramChatId || null,
+      });
+      qc.setQueryData(workspaceKeys.list(), (old: Workspace[] | undefined) =>
+        old?.map((ws) => (ws.id === updated.id ? updated : ws)),
+      );
+      toast.success(t(($) => $.workspace.toast_saved));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t(($) => $.workspace.toast_save_failed));
+    } finally {
+      setSavingTelegram(false);
     }
   };
 
@@ -377,6 +402,59 @@ export function WorkspaceTab() {
           </CardContent>
         </Card>
       </section>
+
+      {/* Telegram inbox push */}
+      {canManageWorkspace && (
+      <section className="space-y-4">
+        <h2 className="text-sm font-semibold">Telegram Notifications</h2>
+        <Card>
+          <CardContent className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Get inbox notifications via a Telegram bot. Create a bot via{" "}
+              <a
+                href="https://t.me/BotFather"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+              >
+                @BotFather
+              </a>{" "}
+              and send /start to get your chat ID.
+            </p>
+            <div>
+              <Label className="text-xs text-muted-foreground">Bot Token</Label>
+              <Input
+                type="text"
+                value={telegramBotToken}
+                onChange={(e) => setTelegramBotToken(e.target.value)}
+                className="mt-1 font-mono"
+                placeholder="123456:ABC-DEF..."
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground">Chat ID</Label>
+              <Input
+                type="text"
+                value={telegramChatId}
+                onChange={(e) => setTelegramChatId(e.target.value)}
+                className="mt-1 font-mono"
+                placeholder="123456789"
+              />
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <Button
+                size="sm"
+                onClick={performSaveTelegram}
+                disabled={savingTelegram}
+              >
+                <Save className="h-3 w-3" />
+                {savingTelegram ? t(($) => $.workspace.saving) : t(($) => $.workspace.save)}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+      )}
 
       {/* Danger Zone — gated on the member query settling so the owner-only
           Delete button and the sole-owner Leave guidance don't flash in

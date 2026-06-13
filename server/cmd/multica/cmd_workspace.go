@@ -69,6 +69,19 @@ var workspaceSwitchCmd = &cobra.Command{
 	RunE: runWorkspaceSwitch,
 }
 
+var workspaceTelegramCmd = &cobra.Command{
+	Use:   "telegram [workspace-id|slug|prefix]",
+	Short: "Configure Telegram inbox push notifications (admin/owner only)",
+	Long: "Set or clear the Telegram bot token and chat ID for inbox push notifications.\n\n" +
+		"Before running this command:\n" +
+		"1. Create a Telegram bot via @BotFather and copy the bot token\n" +
+		"2. Start a chat with your bot and send /start to get your chat ID\n" +
+		"3. Pass the bot token with --bot-token and your chat ID with --chat-id\n\n" +
+		"To disable Telegram notifications, use --reset.",
+	Args: cobra.MaximumNArgs(1),
+	RunE: runWorkspaceTelegram,
+}
+
 func init() {
 	workspaceCmd.AddCommand(workspaceListCmd)
 	workspaceCmd.AddCommand(workspaceGetCmd)
@@ -76,6 +89,7 @@ func init() {
 	workspaceMemberCmd.AddCommand(workspaceMemberListCmd)
 	workspaceCmd.AddCommand(workspaceUpdateCmd)
 	workspaceCmd.AddCommand(workspaceSwitchCmd)
+	workspaceCmd.AddCommand(workspaceTelegramCmd)
 
 	workspaceListCmd.Flags().String("output", "table", "Output format: table or json")
 	workspaceListCmd.Flags().Bool("full-id", false, "Show full UUIDs in table output")
@@ -83,12 +97,16 @@ func init() {
 	workspaceMemberListCmd.Flags().String("output", "table", "Output format: table or json")
 
 	workspaceUpdateCmd.Flags().String("name", "", "New workspace name")
-	workspaceUpdateCmd.Flags().String("description", "", "New description (decodes \\n, \\r, \\t, \\\\; pipe via --description-stdin to preserve literal backslashes)")
+	workspaceUpdateCmd.Flags().String("description", "", "New description (decodes \\n, \\r, \\t, \\; pipe via --description-stdin to preserve literal backslashes)")
 	workspaceUpdateCmd.Flags().Bool("description-stdin", false, "Read description from stdin (preserves multi-line content verbatim)")
-	workspaceUpdateCmd.Flags().String("context", "", "New workspace context (decodes \\n, \\r, \\t, \\\\; pipe via --context-stdin to preserve literal backslashes)")
+	workspaceUpdateCmd.Flags().String("context", "", "New workspace context (decodes \\n, \\r, \\t, \\; pipe via --context-stdin to preserve literal backslashes)")
 	workspaceUpdateCmd.Flags().Bool("context-stdin", false, "Read context from stdin (preserves multi-line content verbatim)")
 	workspaceUpdateCmd.Flags().String("issue-prefix", "", "New issue prefix (uppercased server-side)")
 	workspaceUpdateCmd.Flags().String("output", "json", "Output format: table or json")
+
+	workspaceTelegramCmd.Flags().String("bot-token", "", "Telegram bot token from @BotFather")
+	workspaceTelegramCmd.Flags().String("chat-id", "", "Telegram chat ID for notifications")
+	workspaceTelegramCmd.Flags().Bool("reset", false, "Remove Telegram configuration")
 }
 
 // workspaceSummary is the subset of fields the CLI needs from /api/workspaces
@@ -468,5 +486,62 @@ func runWorkspaceMembers(cmd *cobra.Command, args []string) error {
 		})
 	}
 	cli.PrintTable(os.Stdout, headers, rows)
+	return nil
+}
+
+func runWorkspaceTelegram(cmd *cobra.Command, args []string) error {
+	wsID, err := resolveWorkspaceArg(cmd, args)
+	if err != nil {
+		return err
+	}
+	if wsID == "" {
+		return fmt.Errorf("workspace ID is required: pass an id/slug/prefix as argument or set MULTICA_WORKSPACE_ID")
+	}
+
+	reset, _ := cmd.Flags().GetBool("reset")
+	botToken, _ := cmd.Flags().GetString("bot-token")
+	chatID, _ := cmd.Flags().GetString("chat-id")
+
+	if reset {
+		body := map[string]any{
+			"telegram_bot_token": nil,
+			"telegram_chat_id":   nil,
+		}
+		client, err := newAPIClient(cmd)
+		if err != nil {
+			return err
+		}
+		ctx, cancel := cli.APIContext(context.Background())
+		defer cancel()
+		var ws map[string]any
+		if err := client.PatchJSON(ctx, "/api/workspaces/"+wsID, body, &ws); err != nil {
+			return fmt.Errorf("reset telegram settings: %w", err)
+		}
+		fmt.Fprintln(os.Stdout, "Telegram notifications disabled.")
+		return nil
+	}
+
+	if botToken == "" || chatID == "" {
+		return fmt.Errorf("--bot-token and --chat-id are required (use --reset to disable)")
+	}
+
+	body := map[string]any{
+		"telegram_bot_token": botToken,
+		"telegram_chat_id":   chatID,
+	}
+	client, err := newAPIClient(cmd)
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := cli.APIContext(context.Background())
+	defer cancel()
+
+	var ws map[string]any
+	if err := client.PatchJSON(ctx, "/api/workspaces/"+wsID, body, &ws); err != nil {
+		return fmt.Errorf("update telegram settings: %w", err)
+	}
+
+	fmt.Fprintln(os.Stdout, "Telegram notifications configured successfully.")
 	return nil
 }

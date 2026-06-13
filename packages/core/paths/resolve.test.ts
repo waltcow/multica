@@ -14,6 +14,8 @@ function makeWs(slug: string): Workspace {
     repos: [],
     issue_prefix: slug.toUpperCase(),
     avatar_url: null,
+    telegram_bot_token: null,
+    telegram_chat_id: null,
     created_at: "",
     updated_at: "",
   };

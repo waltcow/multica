@@ -35,17 +35,19 @@ func generateIssuePrefix(name string) string {
 }
 
 type WorkspaceResponse struct {
-	ID          string  `json:"id"`
-	Name        string  `json:"name"`
-	Slug        string  `json:"slug"`
-	Description *string `json:"description"`
-	Context     *string `json:"context"`
-	Settings    any     `json:"settings"`
-	Repos       any     `json:"repos"`
-	IssuePrefix string  `json:"issue_prefix"`
-	AvatarURL   *string `json:"avatar_url"`
-	CreatedAt   string  `json:"created_at"`
-	UpdatedAt   string  `json:"updated_at"`
+	ID                string  `json:"id"`
+	Name              string  `json:"name"`
+	Slug              string  `json:"slug"`
+	Description       *string `json:"description"`
+	Context           *string `json:"context"`
+	Settings          any     `json:"settings"`
+	Repos             any     `json:"repos"`
+	IssuePrefix       string  `json:"issue_prefix"`
+	AvatarURL         *string `json:"avatar_url"`
+	TelegramBotToken  *string `json:"telegram_bot_token"`
+	TelegramChatID    *string `json:"telegram_chat_id"`
+	CreatedAt         string  `json:"created_at"`
+	UpdatedAt         string  `json:"updated_at"`
 }
 
 func workspaceToResponse(w db.Workspace) WorkspaceResponse {
@@ -64,17 +66,19 @@ func workspaceToResponse(w db.Workspace) WorkspaceResponse {
 		repos = []any{}
 	}
 	return WorkspaceResponse{
-		ID:          uuidToString(w.ID),
-		Name:        w.Name,
-		Slug:        w.Slug,
-		Description: textToPtr(w.Description),
-		Context:     textToPtr(w.Context),
-		Settings:    settings,
-		Repos:       repos,
-		IssuePrefix: w.IssuePrefix,
-		AvatarURL:   textToPtr(w.AvatarUrl),
-		CreatedAt:   timestampToString(w.CreatedAt),
-		UpdatedAt:   timestampToString(w.UpdatedAt),
+		ID:                uuidToString(w.ID),
+		Name:              w.Name,
+		Slug:              w.Slug,
+		Description:       textToPtr(w.Description),
+		Context:           textToPtr(w.Context),
+		Settings:          settings,
+		Repos:             repos,
+		IssuePrefix:       w.IssuePrefix,
+		AvatarURL:         textToPtr(w.AvatarUrl),
+		TelegramBotToken:  textToPtr(w.TelegramBotToken),
+		TelegramChatID:    textToPtr(w.TelegramChatId),
+		CreatedAt:         timestampToString(w.CreatedAt),
+		UpdatedAt:         timestampToString(w.UpdatedAt),
 	}
 }
 
@@ -241,13 +245,15 @@ func (h *Handler) CreateWorkspace(w http.ResponseWriter, r *http.Request) {
 }
 
 type UpdateWorkspaceRequest struct {
-	Name        *string `json:"name"`
-	Description *string `json:"description"`
-	Context     *string `json:"context"`
-	Settings    any     `json:"settings"`
-	Repos       any     `json:"repos"`
-	IssuePrefix *string `json:"issue_prefix"`
-	AvatarURL   *string `json:"avatar_url"`
+	Name               *string `json:"name"`
+	Description        *string `json:"description"`
+	Context            *string `json:"context"`
+	Settings           any     `json:"settings"`
+	Repos              any     `json:"repos"`
+	IssuePrefix        *string `json:"issue_prefix"`
+	AvatarURL          *string `json:"avatar_url"`
+	TelegramBotToken   *string `json:"telegram_bot_token"`
+	TelegramChatID     *string `json:"telegram_chat_id"`
 }
 
 type workspaceRepoRef struct {
@@ -341,6 +347,12 @@ func (h *Handler) UpdateWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.AvatarURL != nil {
 		params.AvatarUrl = pgtype.Text{String: *req.AvatarURL, Valid: true}
+	}
+	if req.TelegramBotToken != nil {
+		params.TelegramBotToken = pgtype.Text{String: *req.TelegramBotToken, Valid: true}
+	}
+	if req.TelegramChatID != nil {
+		params.TelegramChatId = pgtype.Text{String: *req.TelegramChatID, Valid: true}
 	}
 
 	ws, err := h.Queries.UpdateWorkspace(r.Context(), params)

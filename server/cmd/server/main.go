@@ -16,6 +16,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/daemonws"
 	"github.com/multica-ai/multica/server/internal/events"
 	"github.com/multica-ai/multica/server/internal/handler"
+	"github.com/multica-ai/multica/server/internal/integrations/telegram"
 	"github.com/multica-ai/multica/server/internal/logger"
 	obsmetrics "github.com/multica-ai/multica/server/internal/metrics"
 	"github.com/multica-ai/multica/server/internal/realtime"
@@ -257,6 +258,14 @@ func main() {
 	registerSubscriberListeners(bus, queries)
 	registerActivityListeners(bus, queries)
 	registerNotificationListeners(bus, queries)
+
+	// Telegram inbox push notifier — loaded lazily per-workspace via queries,
+	// so no global bot token is needed here; each workspace has its own.
+	appBaseURL := strings.TrimSuffix(os.Getenv("MULTICA_APP_URL"), "/")
+	tgNotifier := telegram.NewNotifier(queries, telegram.NewHTTPClient(""), telegram.Config{
+		AppBaseURL: appBaseURL,
+	})
+	tgNotifier.Register(bus)
 
 	metricsConfig := obsmetrics.ConfigFromEnv()
 	var metricsServer *http.Server

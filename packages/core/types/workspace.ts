@@ -15,6 +15,8 @@ export interface Workspace {
   repos: WorkspaceRepo[];
   issue_prefix: string;
   avatar_url: string | null;
+  telegram_bot_token: string | null;
+  telegram_chat_id: string | null;
   created_at: string;
   updated_at: string;
 }

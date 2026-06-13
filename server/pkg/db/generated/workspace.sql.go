@@ -81,6 +81,8 @@ func (q *Queries) GetWorkspace(ctx context.Context, id pgtype.UUID) (Workspace, 
 		&i.IssuePrefix,
 		&i.IssueCounter,
 		&i.AvatarUrl,
+		&i.TelegramBotToken,
+		&i.TelegramChatId,
 	)
 	return i, err
 }
@@ -126,7 +128,8 @@ func (q *Queries) IncrementIssueCounter(ctx context.Context, id pgtype.UUID) (in
 const listWorkspaces = `-- name: ListWorkspaces :many
 SELECT w.id, w.name, w.slug, w.description, w.settings,
        w.created_at, w.updated_at, w.context, w.repos,
-       w.issue_prefix, w.issue_counter, w.avatar_url
+       w.issue_prefix, w.issue_counter, w.avatar_url,
+       w.telegram_bot_token, w.telegram_chat_id
 FROM member m
 JOIN workspace w ON w.id = m.workspace_id
 WHERE m.user_id = $1
@@ -155,6 +158,8 @@ func (q *Queries) ListWorkspaces(ctx context.Context, userID pgtype.UUID) ([]Wor
 			&i.IssuePrefix,
 			&i.IssueCounter,
 			&i.AvatarUrl,
+			&i.TelegramBotToken,
+			&i.TelegramChatId,
 		); err != nil {
 			return nil, err
 		}
@@ -175,20 +180,24 @@ UPDATE workspace SET
     repos = COALESCE($6, repos),
     issue_prefix = COALESCE($7, issue_prefix),
     avatar_url = COALESCE($8, avatar_url),
+    telegram_bot_token = COALESCE($9, telegram_bot_token),
+    telegram_chat_id = COALESCE($10, telegram_chat_id),
     updated_at = now()
 WHERE id = $1
-RETURNING id, name, slug, description, settings, created_at, updated_at, context, repos, issue_prefix, issue_counter, avatar_url
+RETURNING id, name, slug, description, settings, created_at, updated_at, context, repos, issue_prefix, issue_counter, avatar_url, telegram_bot_token, telegram_chat_id
 `
 
 type UpdateWorkspaceParams struct {
-	ID          pgtype.UUID `json:"id"`
-	Name        pgtype.Text `json:"name"`
-	Description pgtype.Text `json:"description"`
-	Context     pgtype.Text `json:"context"`
-	Settings    []byte      `json:"settings"`
-	Repos       []byte      `json:"repos"`
-	IssuePrefix pgtype.Text `json:"issue_prefix"`
-	AvatarUrl   pgtype.Text `json:"avatar_url"`
+	ID               pgtype.UUID `json:"id"`
+	Name             pgtype.Text `json:"name"`
+	Description      pgtype.Text `json:"description"`
+	Context          pgtype.Text `json:"context"`
+	Settings         []byte      `json:"settings"`
+	Repos            []byte      `json:"repos"`
+	IssuePrefix      pgtype.Text `json:"issue_prefix"`
+	AvatarUrl        pgtype.Text `json:"avatar_url"`
+	TelegramBotToken pgtype.Text `json:"telegram_bot_token"`
+	TelegramChatId   pgtype.Text `json:"telegram_chat_id"`
 }
 
 func (q *Queries) UpdateWorkspace(ctx context.Context, arg UpdateWorkspaceParams) (Workspace, error) {
@@ -201,6 +210,8 @@ func (q *Queries) UpdateWorkspace(ctx context.Context, arg UpdateWorkspaceParams
 		arg.Repos,
 		arg.IssuePrefix,
 		arg.AvatarUrl,
+		arg.TelegramBotToken,
+		arg.TelegramChatId,
 	)
 	var i Workspace
 	err := row.Scan(
@@ -216,6 +227,8 @@ func (q *Queries) UpdateWorkspace(ctx context.Context, arg UpdateWorkspaceParams
 		&i.IssuePrefix,
 		&i.IssueCounter,
 		&i.AvatarUrl,
+		&i.TelegramBotToken,
+		&i.TelegramChatId,
 	)
 	return i, err
 }
