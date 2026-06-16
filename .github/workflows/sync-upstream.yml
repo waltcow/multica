@@ -5,6 +5,10 @@ on:
     - cron: "0 23 * * *" # UTC 23:00 = CST 07:00
   workflow_dispatch:
 
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
 jobs:
   sync_latest_from_upstream:
     runs-on: ubuntu-latest
@@ -17,27 +21,61 @@ jobs:
         uses: actions/checkout@v6
         with:
           ref: main
-          persist-credentials: false
+          fetch-depth: 0 # full history is required for a 3-way merge
 
-      - name: Sync upstream changes
-        id: sync
-        uses: aormsby/Fork-Sync-With-Upstream-action@v3.4.3
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5 # reads packageManager from package.json (pnpm@10.28.2)
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
         with:
-          target_sync_branch: main
-          target_repo_token: ${{ secrets.GITHUB_TOKEN }}
-          upstream_sync_branch: main
-          upstream_sync_repo: multica-ai/multica
+          node-version: 22
 
-      - name: New commits found
-        if: steps.sync.outputs.has_new_commits == 'true'
-        run: echo "New commits were found to sync."
-
-      - name: No new commits
-        if: steps.sync.outputs.has_new_commits == 'false'
-        run: echo "There were no new commits."
-
-      - name: Sync failed
-        if: failure()
+      - name: Configure git identity
         run: |
-          echo "::error::Sync with upstream failed. Possible merge conflict or push error."
-          exit 1
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Merge upstream and resolve lockfile conflicts
+        env:
+          UPSTREAM_REPO: multica-ai/multica
+          UPSTREAM_BRANCH: main
+        run: |
+          set -euo pipefail
+
+          git remote add upstream "https://github.com/${UPSTREAM_REPO}.git" || true
+          git fetch upstream "${UPSTREAM_BRANCH}"
+
+          if git merge --no-edit "upstream/${UPSTREAM_BRANCH}"; then
+            echo "Clean merge — no conflicts."
+            exit 0
+          fi
+
+          # Merge produced conflicts — inspect which files.
+          mapfile -t CONFLICTS < <(git diff --name-only --diff-filter=U)
+          echo "Conflicted files: ${CONFLICTS[*]-}"
+
+          # Any conflict outside the lockfile must be resolved by a human.
+          NON_LOCK=()
+          for f in "${CONFLICTS[@]}"; do
+            case "$f" in
+              pnpm-lock.yaml) ;;
+              *) NON_LOCK+=("$f") ;;
+            esac
+          done
+
+          if [ "${#NON_LOCK[@]}" -gt 0 ]; then
+            echo "::error::Unresolvable conflicts require manual merge: ${NON_LOCK[*]}"
+            git merge --abort
+            exit 1
+          fi
+
+          # Only pnpm-lock.yaml conflicts — regenerate from the merged package.json.
+          echo "Only lockfile conflicts detected — regenerating pnpm-lock.yaml..."
+          git checkout --theirs pnpm-lock.yaml || true
+          pnpm install --lockfile-only
+          git add pnpm-lock.yaml
+          git commit --no-edit
+
+      - name: Push synced main
+        run: git push origin main
