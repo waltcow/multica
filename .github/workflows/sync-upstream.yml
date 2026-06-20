@@ -15,6 +15,7 @@ jobs:
     name: Sync latest commits from upstream repo
     permissions:
       contents: write
+      workflows: write
 
     steps:
       - name: Checkout target repo
