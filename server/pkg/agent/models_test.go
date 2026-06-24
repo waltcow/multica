@@ -331,6 +331,21 @@ func TestListModelsKiroWithoutBinary(t *testing.T) {
 	}
 }
 
+func TestListModelsQoderWithoutBinary(t *testing.T) {
+	ctx := context.Background()
+	modelCacheMu.Lock()
+	delete(modelCache, "qoder")
+	modelCacheMu.Unlock()
+
+	got, err := ListModels(ctx, "qoder", "/nonexistent/qodercli")
+	if err != nil {
+		t.Fatalf("ListModels(qoder) error: %v", err)
+	}
+	if got == nil {
+		t.Error("expected non-nil slice even when binary is missing")
+	}
+}
+
 func TestListModelsUnknownProvider(t *testing.T) {
 	ctx := context.Background()
 	_, err := ListModels(ctx, "nonexistent", "")
@@ -877,6 +892,31 @@ func TestParseHermesSessionNewModels(t *testing.T) {
 	}
 	if models[1].ID != "nous:anthropic/claude-opus-4.7" {
 		t.Errorf("expected current model second: %+v", models[1])
+	}
+}
+
+func TestParseHermesSessionNewModelsPreservesCustomModelIDsWithColons(t *testing.T) {
+	raw := []byte(`{
+      "sessionId": "ses_123",
+      "models": {
+        "availableModels": [
+          {"modelId": "custom:lfm2.5:8b", "name": "lfm2.5:8b", "description": "Provider: Custom"}
+        ],
+        "currentModelId": "custom:lfm2.5:8b"
+      }
+    }`)
+	models := parseACPSessionNewModels(raw)
+	if len(models) != 1 {
+		t.Fatalf("expected 1 model, got %d: %+v", len(models), models)
+	}
+	if models[0].ID != "custom:lfm2.5:8b" {
+		t.Errorf("model id must be preserved verbatim, got %+v", models[0])
+	}
+	if models[0].Provider != "custom" {
+		t.Errorf("provider should be derived from the first colon only, got %+v", models[0])
+	}
+	if !models[0].Default {
+		t.Errorf("current custom model should be marked default: %+v", models[0])
 	}
 }
 
