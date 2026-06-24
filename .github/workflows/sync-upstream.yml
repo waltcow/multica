@@ -14,7 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     name: Sync latest commits from upstream repo
     permissions:
-      contents: write      
+      contents: write
+      pull-requests: write
 
     steps:
       - name: Checkout target repo
@@ -22,6 +23,7 @@ jobs:
         with:
           ref: main
           fetch-depth: 0 # full history is required for a 3-way merge
+          token: ${{ secrets.SYNC_UPSTREAM_TOKEN || github.token }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v5 # reads packageManager from package.json (pnpm@10.28.2)
@@ -37,45 +39,103 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Merge upstream and resolve lockfile conflicts
+        id: merge
         env:
           UPSTREAM_REPO: multica-ai/multica
           UPSTREAM_BRANCH: main
+          SYNC_UPSTREAM_TOKEN_CONFIGURED: ${{ secrets.SYNC_UPSTREAM_TOKEN != '' }}
         run: |
           set -euo pipefail
 
+          BASE_SHA="$(git rev-parse HEAD)"
           git remote add upstream "https://github.com/${UPSTREAM_REPO}.git" || true
           git fetch upstream "${UPSTREAM_BRANCH}"
 
-          if git merge --no-edit "upstream/${UPSTREAM_BRANCH}"; then
+          if ! git merge --no-edit "upstream/${UPSTREAM_BRANCH}"; then
+            # Merge produced conflicts — inspect which files.
+            mapfile -t CONFLICTS < <(git diff --name-only --diff-filter=U)
+            echo "Conflicted files: ${CONFLICTS[*]-}"
+
+            # Any conflict outside the lockfile must be resolved by a human.
+            NON_LOCK=()
+            for f in "${CONFLICTS[@]}"; do
+              case "$f" in
+                pnpm-lock.yaml) ;;
+                *) NON_LOCK+=("$f") ;;
+              esac
+            done
+
+            if [ "${#NON_LOCK[@]}" -gt 0 ]; then
+              echo "::error::Unresolvable conflicts require manual merge: ${NON_LOCK[*]}"
+              git merge --abort
+              exit 1
+            fi
+
+            # Only pnpm-lock.yaml conflicts — regenerate from the merged package.json.
+            echo "Only lockfile conflicts detected — regenerating pnpm-lock.yaml..."
+            git checkout --theirs pnpm-lock.yaml || true
+            pnpm install --lockfile-only
+            git add pnpm-lock.yaml
+            git commit --no-edit
+          else
             echo "Clean merge — no conflicts."
+          fi
+
+          if [ "$(git rev-parse HEAD)" = "${BASE_SHA}" ]; then
+            echo "No upstream changes to sync."
+            echo "sync_needed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          # Merge produced conflicts — inspect which files.
-          mapfile -t CONFLICTS < <(git diff --name-only --diff-filter=U)
-          echo "Conflicted files: ${CONFLICTS[*]-}"
+          CHANGED_FILES="$(git diff --name-only "${BASE_SHA}"..HEAD)"
+          echo "Changed files:"
+          echo "${CHANGED_FILES}"
 
-          # Any conflict outside the lockfile must be resolved by a human.
-          NON_LOCK=()
-          for f in "${CONFLICTS[@]}"; do
-            case "$f" in
-              pnpm-lock.yaml) ;;
-              *) NON_LOCK+=("$f") ;;
-            esac
-          done
-
-          if [ "${#NON_LOCK[@]}" -gt 0 ]; then
-            echo "::error::Unresolvable conflicts require manual merge: ${NON_LOCK[*]}"
-            git merge --abort
+          if echo "${CHANGED_FILES}" | grep -q '^.github/workflows/' && [ "${SYNC_UPSTREAM_TOKEN_CONFIGURED}" != "true" ]; then
+            echo "::error::Upstream changed GitHub workflow files. Configure a SYNC_UPSTREAM_TOKEN secret with Contents and Workflows write access so the sync branch can be pushed."
             exit 1
           fi
 
-          # Only pnpm-lock.yaml conflicts — regenerate from the merged package.json.
-          echo "Only lockfile conflicts detected — regenerating pnpm-lock.yaml..."
-          git checkout --theirs pnpm-lock.yaml || true
-          pnpm install --lockfile-only
-          git add pnpm-lock.yaml
-          git commit --no-edit
+          UPSTREAM_SHA="$(git rev-parse "upstream/${UPSTREAM_BRANCH}")"
+          echo "sync_needed=true" >> "$GITHUB_OUTPUT"
+          echo "upstream_sha=${UPSTREAM_SHA}" >> "$GITHUB_OUTPUT"
 
-      - name: Push synced main
-        run: git push origin main
+      - name: Push sync branch
+        id: push
+        if: steps.merge.outputs.sync_needed == 'true'
+        env:
+          SYNC_BRANCH: sync-upstream/main
+        run: |
+          set -euo pipefail
+
+          git push --force-with-lease origin "HEAD:${SYNC_BRANCH}"
+          echo "branch=${SYNC_BRANCH}" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update sync PR
+        if: steps.merge.outputs.sync_needed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_UPSTREAM_TOKEN || github.token }}
+          SYNC_BRANCH: ${{ steps.push.outputs.branch }}
+          UPSTREAM_SHA: ${{ steps.merge.outputs.upstream_sha }}
+        run: |
+          set -euo pipefail
+
+          TITLE="chore(sync): sync upstream main"
+          BODY="$(printf "%s\n\n%s\n\n%s\n" \
+            "Automated sync from multica-ai/multica@main." \
+            "Upstream commit: ${UPSTREAM_SHA}" \
+            "This PR is opened instead of pushing directly to main so upstream changes, including workflow changes, can be reviewed before merge.")"
+
+          PR_NUMBER="$(gh pr list \
+            --base main \
+            --head "${SYNC_BRANCH}" \
+            --state open \
+            --json number \
+            --jq '.[0].number // empty')"
+
+          if [ -n "${PR_NUMBER}" ]; then
+            gh pr edit "${PR_NUMBER}" --title "${TITLE}" --body "${BODY}"
+            echo "Updated sync PR #${PR_NUMBER}."
+          else
+            gh pr create --base main --head "${SYNC_BRANCH}" --title "${TITLE}" --body "${BODY}"
+          fi
