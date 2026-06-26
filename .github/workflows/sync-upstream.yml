@@ -1,3 +1,8 @@
+# Syncs multica-ai/multica@main into this fork via sync-upstream/main PRs.
+#
+# Required secret: SYNC_UPSTREAM_TOKEN — fine-grained or classic PAT with
+# Contents (read/write), Pull requests (read/write), and Workflows (read/write)
+# on waltcow/multica. Needed when upstream changes .github/workflows/*.
 name: Sync Upstream
 
 on:
@@ -11,11 +16,13 @@ concurrency:
 
 jobs:
   sync_latest_from_upstream:
+    if: github.repository == 'waltcow/multica'
     runs-on: ubuntu-latest
     name: Sync latest commits from upstream repo
     permissions:
       contents: write
       pull-requests: write
+      issues: write
 
     steps:
       - name: Checkout target repo
@@ -55,6 +62,7 @@ jobs:
             # Merge produced conflicts — inspect which files.
             mapfile -t CONFLICTS < <(git diff --name-only --diff-filter=U)
             echo "Conflicted files: ${CONFLICTS[*]-}"
+            echo "conflicts=${CONFLICTS[*]-}" >> "$GITHUB_OUTPUT"
 
             # Any conflict outside the lockfile must be resolved by a human.
             NON_LOCK=()
@@ -100,6 +108,35 @@ jobs:
           echo "sync_needed=true" >> "$GITHUB_OUTPUT"
           echo "upstream_sha=${UPSTREAM_SHA}" >> "$GITHUB_OUTPUT"
 
+      - name: Report merge failure
+        if: failure() && steps.merge.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_UPSTREAM_TOKEN || github.token }}
+          CONFLICTS: ${{ steps.merge.outputs.conflicts }}
+        run: |
+          set -euo pipefail
+
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          TITLE="Upstream sync failed: manual merge required"
+          BODY="$(printf "%s\n\n%s\n\n%s\n\n%s\n" \
+            "The scheduled upstream sync could not merge automatically." \
+            "Conflicted files: \`${CONFLICTS:-unknown}\`" \
+            "Workflow run: ${RUN_URL}" \
+            "Resolve conflicts locally, push to \`sync-upstream/main\`, and open a PR — or fix on \`main\` and re-run the workflow.")"
+
+          EXISTING="$(gh issue list \
+            --search "in:title \"${TITLE}\"" \
+            --state open \
+            --json number \
+            --jq '.[0].number // empty')"
+
+          if [ -n "${EXISTING}" ]; then
+            gh issue comment "${EXISTING}" --body "${BODY}"
+            echo "Updated existing issue #${EXISTING}."
+          else
+            gh issue create --title "${TITLE}" --body "${BODY}" --label "sync-upstream"
+          fi
+
       - name: Push sync branch
         id: push
         if: steps.merge.outputs.sync_needed == 'true'
@@ -120,6 +157,11 @@ jobs:
         run: |
           set -euo pipefail
 
+          gh label create "sync-upstream" \
+            --color "0366d6" \
+            --description "Automated upstream sync PR or failure report" \
+            2>/dev/null || true
+
           TITLE="chore(sync): sync upstream main"
           BODY="$(printf "%s\n\n%s\n\n%s\n" \
             "Automated sync from multica-ai/multica@main." \
@@ -134,8 +176,13 @@ jobs:
             --jq '.[0].number // empty')"
 
           if [ -n "${PR_NUMBER}" ]; then
-            gh pr edit "${PR_NUMBER}" --title "${TITLE}" --body "${BODY}"
+            gh pr edit "${PR_NUMBER}" --title "${TITLE}" --body "${BODY}" --add-label "sync-upstream"
             echo "Updated sync PR #${PR_NUMBER}."
           else
-            gh pr create --base main --head "${SYNC_BRANCH}" --title "${TITLE}" --body "${BODY}"
+            gh pr create \
+              --base main \
+              --head "${SYNC_BRANCH}" \
+              --title "${TITLE}" \
+              --body "${BODY}" \
+              --label "sync-upstream"
           fi
