@@ -1,0 +1,74 @@
+# Syncs multica-ai/multica@main directly into this repository's main branch.
+#
+# Required secret: SYNC_UPSTREAM_TOKEN. Use a fine-grained PAT with Contents
+# and Workflows read/write access to this repository, or a classic PAT with
+# repo and workflow scopes. A dedicated token ensures the resulting push
+# triggers the repository's normal CI workflows.
+name: Sync Upstream
+
+on:
+  schedule:
+    - cron: "0 23 * * *" # UTC 23:00 = Asia/Shanghai 07:00
+  workflow_dispatch:
+
+concurrency:
+  group: sync-upstream-main
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: github.repository == 'waltcow/multica'
+    name: Merge upstream main
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Verify sync token
+        env:
+          SYNC_UPSTREAM_TOKEN: ${{ secrets.SYNC_UPSTREAM_TOKEN }}
+        run: |
+          if [ -z "${SYNC_UPSTREAM_TOKEN}" ]; then
+            echo "::error::Configure the SYNC_UPSTREAM_TOKEN repository secret before running this workflow."
+            exit 1
+          fi
+
+      - name: Checkout main
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.SYNC_UPSTREAM_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Merge upstream main
+        id: merge
+        run: |
+          set -euo pipefail
+
+          before_sha="$(git rev-parse HEAD)"
+          git remote add upstream https://github.com/multica-ai/multica.git
+          git fetch --no-tags upstream main
+
+          if ! git merge --no-edit upstream/main; then
+            conflicts="$(git diff --name-only --diff-filter=U | tr '\n' ' ')"
+            echo "::error::Upstream merge has conflicts and requires manual resolution: ${conflicts:-unknown files}"
+            git merge --abort
+            exit 1
+          fi
+
+          if [ "$(git rev-parse HEAD)" = "${before_sha}" ]; then
+            echo "No upstream changes to sync."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push main
+        if: steps.merge.outputs.changed == 'true'
+        run: git push origin HEAD:main
