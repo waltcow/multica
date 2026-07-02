@@ -56,10 +56,27 @@ jobs:
           git fetch --no-tags upstream main
 
           if ! git merge --no-edit upstream/main; then
-            conflicts="$(git diff --name-only --diff-filter=U | tr '\n' ' ')"
-            echo "::error::Upstream merge has conflicts and requires manual resolution: ${conflicts:-unknown files}"
-            git merge --abort
-            exit 1
+            mapfile -t conflict_files < <(git diff --name-only --diff-filter=U)
+
+            has_non_lock_conflict="false"
+            for file in "${conflict_files[@]}"; do
+              if [ "$file" != "pnpm-lock.yaml" ]; then
+                has_non_lock_conflict="true"
+                break
+              fi
+            done
+
+            if [ "$has_non_lock_conflict" = "true" ]; then
+              conflicts="$(printf '%s ' "${conflict_files[@]}")"
+              echo "::error::Upstream merge has conflicts and requires manual resolution: ${conflicts:-unknown files}"
+              git merge --abort
+              exit 1
+            fi
+
+            echo "Only pnpm-lock.yaml has conflicts; auto-resolving with pnpm lockfile regeneration."
+            pnpm install --lockfile-only
+            git add pnpm-lock.yaml
+            git merge --continue
           fi
 
           if [ "$(git rev-parse HEAD)" = "${before_sha}" ]; then
