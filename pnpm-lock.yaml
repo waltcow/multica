@@ -3394,6 +3394,8 @@ packages:
       react-redux:
         optional: true
 
+  '@remirror/core-constants@3.0.0': {}
+
   '@rn-primitives/avatar@1.4.0':
     resolution: {integrity: sha512-OOS5QSET4XEVcv4q20PAwkzZPC6LlE0mMFAMjbJ4hLA6stzQJxNaK9PaUl1AXt+x4Prh4MPOC7ktuERIKkNeYg==}
     peerDependencies:
