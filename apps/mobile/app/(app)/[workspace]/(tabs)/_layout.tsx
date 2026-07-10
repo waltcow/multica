@@ -10,7 +10,7 @@ import {
 import { useWorkspaceStore } from "@/data/workspace-store";
 import {
   useInboxUnreadCount,
-  useChatUnreadSessionCount,
+  useChatUnreadMessageCount,
 } from "@/lib/unread-counts";
 import Inbox from "./inbox";
 import MyIssues from "./my-issues";
@@ -34,15 +34,14 @@ export default function TabsLayout() {
   );
   const wsId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const inboxUnread = useInboxUnreadCount(wsId);
-  const chatUnread = useChatUnreadSessionCount(wsId);
+  const chatUnread = useChatUnreadMessageCount(wsId);
 
-  // Truncation aligned with web: inbox 99+, chat 9+ (matches sidebar +
-  // ChatFab respectively). `undefined` makes React Navigation hide the
-  // badge, so zero-count is a free no-op.
+  // Truncation aligned with web's sidebar badges: 99+ for both. `undefined`
+  // makes React Navigation hide the badge, so zero-count is a free no-op.
   const inboxBadge =
     inboxUnread > 0 ? (inboxUnread > 99 ? "99+" : String(inboxUnread)) : undefined;
   const chatBadge =
-    chatUnread > 0 ? (chatUnread > 9 ? "9+" : String(chatUnread)) : undefined;
+    chatUnread > 0 ? (chatUnread > 99 ? "99+" : String(chatUnread)) : undefined;
 
   const onSelectionChange = (value: string) => {
     if (
