@@ -88,8 +88,33 @@ function BareAvatar({
   // already returns it — the previous early-return for type==="squad" meant
   // that value was silently dropped.
   const rawUrl = type && type !== "system" ? getAvatarUrl(type, id) : null;
-  const url = resolvePublicFileUrl(rawUrl);
+  const emoji = rawUrl?.startsWith("emoji:")
+    ? rawUrl.slice("emoji:".length).trim() || null
+    : null;
+  // fork: resolve relative paths (e.g. "/uploads/...") against the API base URL
+  // before the protocol allow-list, so self-hosted backends render avatars.
+  const resolvedUrl = !emoji ? resolvePublicFileUrl(rawUrl) : null;
+  const url =
+    !emoji && resolvedUrl && /^(https?:|data:|file:|asset:)/.test(resolvedUrl)
+      ? resolvedUrl
+      : null;
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
+
+  if (emoji) {
+    return (
+      <View
+        style={{ width: size, height: size, borderRadius: radius }}
+        className="items-center justify-center bg-muted"
+      >
+        <Text
+          accessibilityLabel={type === "system" ? "" : getName(type, id)}
+          style={{ fontSize: Math.round(size * 0.58), lineHeight: size }}
+        >
+          {emoji}
+        </Text>
+      </View>
+    );
+  }
 
   useEffect(() => {
     if (failedUrl && failedUrl !== url) {
